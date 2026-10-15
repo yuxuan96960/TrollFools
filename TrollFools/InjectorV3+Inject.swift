@@ -272,3 +272,249 @@ extension InjectorV3 {
         fatalError("Unable to locate resource \(name)")
     }
 }
+
+// MARK: - Plug-In Structure
+
+enum PlugInStructureKind: String {
+    case dylib
+    case framework
+    case bundle
+    case unsupported
+
+    var localizedName: String {
+        switch self {
+        case .dylib: NSLocalizedString("Dylib", comment: "")
+        case .framework: NSLocalizedString("Framework", comment: "")
+        case .bundle: NSLocalizedString("Bundle", comment: "")
+        case .unsupported: NSLocalizedString("Unknown", comment: "")
+        }
+    }
+}
+
+extension InjectorV3 {
+    // MARK: - Inspection
+
+    func structureKindOfAsset(_ assetURL: URL) -> PlugInStructureKind {
+        switch assetURL.pathExtension.lowercased() {
+        case "dylib": .dylib
+        case "framework": .framework
+        case "bundle": .bundle
+        default: .unsupported
+        }
+    }
+
+    func analyzeBundleStructure() -> BundleStructureReport {
+        BundleStructureReport(bundleURL: bundleURL, entries: structureEntriesInBundle())
+    }
+
+    /// Snapshot of every Mach-O inside the target bundle: architectures, encryption,
+    /// loaded dylibs and runtime paths.
+    func analyzeBundleStructure() -> BundleStructureReport {
+        BundleStructureReport(bundleURL: bundleURL, entries: structureEntriesInBundle())
+    }
+
+    // MARK: - Restructure
+
+    /// Relocates a bare dylib into a proper `XXX.framework` bundle and rewrites every
+    /// load command that used to point at the bare dylib.
+    @discardableResult
+    func convertAssetToFramework(_ assetURL: URL) throws -> URL {
+        guard structureKindOfAsset(assetURL) == .dylib else {
+            throw Error.generic(NSLocalizedString("This plug-in is not a dylib.", comment: ""))
+        }
+
+        try checkAssetIsInjected(assetURL)
+
+        guard FileManager.default.fileExists(atPath: assetURL.path) else {
+            throw Error.generic(String(format: NSLocalizedString("Plug-in not found: %@", comment: ""), assetURL.lastPathComponent))
+        }
+
+        terminateApp()
+
+        let baseName = assetURL.deletingPathExtension().lastPathComponent
+        let frameworkURL = frameworksDirectoryURL
+            .appendingPathComponent(baseName, isDirectory: false)
+            .appendingPathExtension("framework")
+        let frameworkMachOURL = frameworkURL.appendingPathComponent(baseName, isDirectory: false)
+
+        let oldItemName = assetURL.lastPathComponent
+        let newLoadCommandName = "@rpath/\(baseName).framework/\(baseName)"
+
+        let references = loadCommandReferences(matching: oldItemName)
+        let previousLoadCommands = references.map { ($0.target, $0.name) }
+
+        if FileManager.default.fileExists(atPath: frameworkURL.path) {
+            try cmdRemove(frameworkURL, recursively: true)
+        }
+
+        do {
+            try cmdMakeDirectory(at: frameworkURL)
+            try cmdCopy(from: assetURL, to: frameworkMachOURL)
+            try installFrameworkInfoPlist(at: frameworkURL, executableName: baseName)
+            try markBundlesAsInjected([frameworkURL], privileged: true)
+
+            try rewriteLoadCommands(references, to: newLoadCommandName)
+            try cmdRemove(assetURL)
+
+            try applyCoreTrustBypass(frameworkURL)
+            for target in uniqueTargets(references.map { $0.target }) {
+                try applyCoreTrustBypass(target)
+            }
+        } catch {
+            try? cmdRemove(frameworkURL, recursively: true)
+            for (target, name) in previousLoadCommands {
+                try? cmdChangeLoadCommandDylib(target, from: newLoadCommandName, to: name)
+            }
+            throw error
+        }
+
+        DDLogInfo("Restructured \(oldItemName) as \(frameworkURL.lastPathComponent)", ddlog: logger)
+
+        return frameworkURL
+    }
+
+    /// The opposite of `convertAssetToFramework(_:)`: flattens a framework back into a bare dylib.
+    @discardableResult
+    func convertAssetToDylib(_ assetURL: URL) throws -> URL {
+        guard structureKindOfAsset(assetURL) == .framework else {
+            throw Error.generic(NSLocalizedString("This plug-in is not a framework.", comment: ""))
+        }
+
+        try checkAssetIsInjected(assetURL)
+
+        guard FileManager.default.fileExists(atPath: assetURL.path) else {
+            throw Error.generic(String(format: NSLocalizedString("Plug-in not found: %@", comment: ""), assetURL.lastPathComponent))
+        }
+
+        terminateApp()
+
+        let baseName = assetURL.deletingPathExtension().lastPathComponent
+        let frameworkMachOURL = try locateExecutableInBundle(assetURL)
+        let dylibURL = frameworksDirectoryURL
+            .appendingPathComponent(baseName, isDirectory: false)
+            .appendingPathExtension("dylib")
+
+        let oldItemName = "\(baseName).framework/\(baseName)"
+        let newLoadCommandName = "@rpath/\(baseName).dylib"
+
+        let references = loadCommandReferences(matching: oldItemName)
+        let previousLoadCommands = references.map { ($0.target, $0.name) }
+
+        if FileManager.default.fileExists(atPath: dylibURL.path) {
+            try cmdRemove(dylibURL)
+        }
+
+        do {
+            try cmdCopy(from: frameworkMachOURL, to: dylibURL)
+
+            try rewriteLoadCommands(references, to: newLoadCommandName)
+            try cmdRemove(assetURL, recursively: true)
+
+            try applyCoreTrustBypass(dylibURL)
+            for target in uniqueTargets(references.map { $0.target }) {
+                try applyCoreTrustBypass(target)
+            }
+        } catch {
+            try? cmdRemove(dylibURL)
+            for (target, name) in previousLoadCommands {
+                try? cmdChangeLoadCommandDylib(target, from: newLoadCommandName, to: name)
+            }
+            throw error
+        }
+
+        DDLogInfo("Restructured \(baseName).framework as \(dylibURL.lastPathComponent)", ddlog: logger)
+
+        return dylibURL
+    }
+
+    /// Swaps the contents of an already injected plug-in in place, keeping its load command untouched.
+    func replaceAsset(at oldURL: URL, with newURL: URL) throws {
+        guard FileManager.default.fileExists(atPath: oldURL.path) else {
+            throw Error.generic(String(format: NSLocalizedString("Plug-in not found: %@", comment: ""), oldURL.lastPathComponent))
+        }
+
+        terminateApp()
+
+        let newIsDirectory = checkIsDirectory(newURL)
+        try cmdRemove(oldURL, recursively: checkIsDirectory(oldURL))
+        try cmdCopy(from: newURL, to: oldURL, overwrite: true)
+        try cmdChangeOwnerToInstalld(oldURL, recursively: newIsDirectory)
+        try applyCoreTrustBypass(oldURL)
+    }
+
+    // MARK: - Private Helpers
+
+    /// Every Mach-O whose load commands reference the given item name,
+    /// either as a bare item (`Foo.dylib`) or as a nested framework item (`Foo.framework/Foo`).
+    fileprivate func loadCommandReferences(matching itemName: String) -> [(target: URL, name: String)] {
+        var targets = [executableURL]
+        targets.append(contentsOf: machOsInFrameworksDirectory())
+
+        var references = [(target: URL, name: String)]()
+        for target in uniqueTargets(targets) {
+            guard let dylibs = try? loadedDylibsOfMachO(target) else {
+                continue
+            }
+            for name in dylibs where name == itemName || name.hasSuffix("/" + itemName) {
+                references.append((target, name))
+            }
+        }
+        return references
+    }
+
+    fileprivate func rewriteLoadCommands(_ references: [(target: URL, name: String)], to newName: String) throws {
+        for reference in references {
+            try cmdInsertLoadCommandRuntimePath(reference.target, name: "@executable_path/Frameworks")
+            try cmdChangeLoadCommandDylib(reference.target, from: reference.name, to: newName)
+        }
+    }
+
+    fileprivate func uniqueTargets(_ targets: [URL]) -> [URL] {
+        var seen = Set<String>()
+        var results = [URL]()
+        for target in targets where !seen.contains(target.path) {
+            seen.insert(target.path)
+            results.append(target)
+        }
+        return results
+    }
+
+    /// Restructuring only makes sense for assets that already live inside the target bundle.
+    fileprivate func checkAssetIsInjected(_ assetURL: URL) throws {
+        let prefix = frameworksDirectoryURL.path + "/"
+        guard assetURL.path.hasPrefix(prefix),
+              FileManager.default.fileExists(atPath: assetURL.path)
+        else {
+            throw Error.generic(NSLocalizedString("Only injected plug-ins can be restructured.", comment: ""))
+        }
+    }
+
+    fileprivate func installFrameworkInfoPlist(at frameworkURL: URL, executableName: String) throws {
+        let plist: [String: Any] = [
+            "CFBundleDevelopmentRegion": "en",
+            "CFBundleExecutable": executableName,
+            "CFBundleIdentifier": "com.trollfools.injected.\(executableName.lowercased())",
+            "CFBundleInfoDictionaryVersion": "6.0",
+            "CFBundleName": executableName,
+            "CFBundlePackageType": "FMWK",
+            "CFBundleShortVersionString": "1.0.0",
+            "CFBundleVersion": "1",
+            "MinimumOSVersion": "14.0",
+        ]
+
+        let data = try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
+
+        let temporaryPlistURL = temporaryDirectoryURL
+            .appendingPathComponent("\(UUID().uuidString)-Info.plist")
+        try data.write(to: temporaryPlistURL, options: .atomic)
+        defer {
+            try? FileManager.default.removeItem(at: temporaryPlistURL)
+        }
+
+        try cmdCopy(
+            from: temporaryPlistURL,
+            to: frameworkURL.appendingPathComponent("Info.plist"),
+            overwrite: true
+        )
+    }
+}
