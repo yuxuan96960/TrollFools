@@ -8,7 +8,20 @@
 import CocoaLumberjackSwift
 import SwiftUI
 import SwiftUIIntrospect
+import UniformTypeIdentifiers
 import ZIPFoundation
+
+enum PlugInSheetTarget: Identifiable {
+    case rename(InjectedPlugIn)
+    case framework(InjectedPlugIn)
+
+    var id: String {
+        switch self {
+        case let .rename(plugIn): "rename-\(plugIn.id)"
+        case let .framework(plugIn): "framework-\(plugIn.id)"
+        }
+    }
+}
 
 struct EjectListView: View {
     @StateObject var searchViewModel = AppListSearchModel()
@@ -21,6 +34,10 @@ struct EjectListView: View {
     @State var isExportingAll = false
     @State var isErrorOccurred = false
     @State var lastError: Error?
+
+    @State var activeSheet: PlugInSheetTarget?
+    @State var replaceTarget: InjectedPlugIn?
+    @State var isReplaceImporterPresented = false
 
     @State var isWarningPresented = false
 
@@ -74,6 +91,31 @@ struct EjectListView: View {
             .toolbar { toolbarContent }
             .animation(.easeOut, value: isExportingAll)
             .quickLookPreview($quickLookExport)
+            .sheet(item: $activeSheet) { target in
+                sheetContent(for: target)
+            }
+            .fileImporter(
+                isPresented: $isReplaceImporterPresented,
+                allowedContentTypes: [.data],
+                allowsMultipleSelection: true
+            ) { result in
+                handleReplaceSelection(result)
+            }
+    }
+
+    @ViewBuilder
+    private func sheetContent(for target: PlugInSheetTarget) -> some View {
+        switch target {
+        case let .rename(plugIn):
+            PlugInRenameView(plugIn: plugIn)
+                .environmentObject(ejectList)
+
+        case let .framework(plugIn):
+            PlugInFrameworkView(app: ejectList.app, plugIn: plugIn) { _ in
+                ejectList.app.reload()
+                ejectList.reload()
+            }
+        }
     }
 
     @ViewBuilder
@@ -319,12 +361,113 @@ struct EjectListView: View {
     @ViewBuilder
     private func deletablePlugInCell(_ plugin: InjectedPlugIn) -> some View {
         if #available(iOS 16, *) {
-            PlugInCell(plugin, quickLookExport: $quickLookExport)
-                .environmentObject(ejectList)
+            plugInCell(plugin)
         } else {
-            PlugInCell(plugin, quickLookExport: $quickLookExport)
-                .environmentObject(ejectList)
+            plugInCell(plugin)
                 .padding(.vertical, 4)
+        }
+    }
+
+    private func plugInCell(_ plugin: InjectedPlugIn) -> some View {
+        PlugInCell(
+            plugin,
+            quickLookExport: $quickLookExport,
+            onRenameRequest: { activeSheet = .rename($0) },
+            onReplaceRequest: {
+                replaceTarget = $0
+                isReplaceImporterPresented = true
+            },
+            onFrameworkRequest: { activeSheet = .framework($0) }
+        )
+        .environmentObject(ejectList)
+    }
+
+    private func makeInjector() throws -> InjectorV3 {
+        let injector = try InjectorV3(ejectList.app.url)
+
+        if injector.appID.isEmpty {
+            injector.appID = ejectList.app.bid
+        }
+
+        if injector.teamID.isEmpty {
+            injector.teamID = ejectList.app.teamID
+        }
+
+        injector.useWeakReference = useWeakReference
+        injector.preferMainExecutable = preferMainExecutable
+        injector.useFrameworkEnumerationFallback = useFrameworkEnumerationFallback
+        injector.injectStrategy = injectStrategy
+
+        return injector
+    }
+
+    private func report(_ error: Error, logFileURL: URL?) {
+        DDLogError("\(error)", ddlog: InjectorV3.main.logger)
+
+        var userInfo: [String: Any] = [
+            NSLocalizedDescriptionKey: error.localizedDescription,
+        ]
+
+        if let logFileURL {
+            userInfo[NSURLErrorKey] = logFileURL
+        }
+
+        lastError = NSError(domain: Constants.gErrorDomain, code: 0, userInfo: userInfo)
+        isErrorOccurred = true
+    }
+
+    private func handleReplaceSelection(_ result: Result<[URL], Error>) {
+        guard let plugIn = replaceTarget else {
+            return
+        }
+
+        replaceTarget = nil
+
+        switch result {
+        case let .success(urls):
+            guard let sourceURL = urls.first else {
+                return
+            }
+            performReplace(plugIn, with: sourceURL)
+
+        case let .failure(error):
+            report(error, logFileURL: nil)
+        }
+    }
+
+    private func performReplace(_ plugIn: InjectedPlugIn, with sourceURL: URL) {
+        let needsSecurityScope = sourceURL.startAccessingSecurityScopedResource()
+        defer {
+            if needsSecurityScope {
+                sourceURL.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        var logFileURL: URL?
+
+        do {
+            let injector = try makeInjector()
+            logFileURL = injector.latestLogFileURL
+
+            let preparedAssets = try injector.preprocessAssets([sourceURL])
+
+            guard let assetURL = preparedAssets.first else {
+                throw InjectorV3.Error.generic(NSLocalizedString("No valid plug-ins found.", comment: ""))
+            }
+
+            if assetURL.pathExtension.lowercased() == plugIn.url.pathExtension.lowercased() {
+                try injector.replaceAsset(at: plugIn.url, with: assetURL)
+            } else {
+                if plugIn.isEnabled {
+                    try injector.eject([plugIn.url], shouldDesist: false)
+                }
+                try injector.inject([assetURL], shouldPersist: false)
+            }
+
+            ejectList.app.reload()
+            ejectList.reload()
+        } catch {
+            report(error, logFileURL: logFileURL)
         }
     }
 
