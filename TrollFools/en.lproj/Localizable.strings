@@ -315,3 +315,78 @@
 
 /* No comment provided by engineer. */
 "You’ve selected at least one Debian Package “%@”. We’re here to remind you that it will not work as it was in a jailbroken environment. Please make sure you know what you’re doing." = "You’ve selected at least one Debian Package “%@”. We’re here to remind you that it will not work as it was in a jailbroken environment. Please make sure you know what you’re doing.";
+
+/* No comment provided by engineer. */
+"App Structure" = "App Structure";
+
+/* No comment provided by engineer. */
+"Convert to Dylib Structure" = "Convert to Dylib Structure";
+
+/* No comment provided by engineer. */
+"Convert to Framework Structure" = "Convert to Framework Structure";
+
+/* No comment provided by engineer. */
+"Current structure: %@" = "Current structure: %@";
+
+/* No comment provided by engineer. */
+"Display Name" = "Display Name";
+
+/* No comment provided by engineer. */
+"Done." = "Done.";
+
+/* No comment provided by engineer. */
+"Dylib" = "Dylib";
+
+/* No comment provided by engineer. */
+"Encrypted" = "Encrypted";
+
+/* No comment provided by engineer. */
+"Framework" = "Framework";
+
+/* No comment provided by engineer. */
+"Leave it empty to restore the original file name." = "Leave it empty to restore the original file name.";
+
+/* No comment provided by engineer. */
+"Main" = "Main";
+
+/* No comment provided by engineer. */
+"No Mach-O found." = "No Mach-O found.";
+
+/* No comment provided by engineer. */
+"Only injected plug-ins can be restructured." = "Only injected plug-ins can be restructured.";
+
+/* No comment provided by engineer. */
+"Plug-In" = "Plug-In";
+
+/* No comment provided by engineer. */
+"Plug-in not found: %@" = "Plug-in not found: %@";
+
+/* No comment provided by engineer. */
+"Processing…" = "Processing…";
+
+/* No comment provided by engineer. */
+"Rename" = "Rename";
+
+/* No comment provided by engineer. */
+"Replace" = "Replace";
+
+/* No comment provided by engineer. */
+"Restructure" = "Restructure";
+
+/* No comment provided by engineer. */
+"Save" = "Save";
+
+/* No comment provided by engineer. */
+"The plug-in will be relocated into Frameworks/ and every load command pointing at it will be rewritten." = "The plug-in will be relocated into Frameworks/ and every load command pointing at it will be rewritten.";
+
+/* No comment provided by engineer. */
+"This plug-in is not a dylib." = "This plug-in is not a dylib.";
+
+/* No comment provided by engineer. */
+"This plug-in is not a framework." = "This plug-in is not a framework.";
+
+/* No comment provided by engineer. */
+"Unable to load the target application." = "Unable to load the target application.";
+
+/* No comment provided by engineer. */
+"Unknown" = "Unknown";

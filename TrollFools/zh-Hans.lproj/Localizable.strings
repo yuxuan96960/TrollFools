@@ -315,3 +315,78 @@
 
 /* No comment provided by engineer. */
 "You’ve selected at least one Debian Package “%@”. We’re here to remind you that it will not work as it was in a jailbroken environment. Please make sure you know what you’re doing." = "你至少选择了一个 Debian 软件包 “%@”。请留意，它通常不会像在越狱环境当中那样工作，甚至完全不起作用。请确保你知道自己在做些什么。";
+
+/* No comment provided by engineer. */
+"App Structure" = "应用结构";
+
+/* No comment provided by engineer. */
+"Convert to Dylib Structure" = "还原为 Dylib 结构";
+
+/* No comment provided by engineer. */
+"Convert to Framework Structure" = "转换为 Framework 结构";
+
+/* No comment provided by engineer. */
+"Current structure: %@" = "当前结构:%@";
+
+/* No comment provided by engineer. */
+"Display Name" = "显示名称";
+
+/* No comment provided by engineer. */
+"Done." = "完成。";
+
+/* No comment provided by engineer. */
+"Dylib" = "Dylib";
+
+/* No comment provided by engineer. */
+"Encrypted" = "已加密";
+
+/* No comment provided by engineer. */
+"Framework" = "Framework";
+
+/* No comment provided by engineer. */
+"Leave it empty to restore the original file name." = "留空即可恢复原始文件名。";
+
+/* No comment provided by engineer. */
+"Main" = "主程序";
+
+/* No comment provided by engineer. */
+"No Mach-O found." = "未找到 Mach-O。";
+
+/* No comment provided by engineer. */
+"Only injected plug-ins can be restructured." = "只有已注入的插件才能调整结构。";
+
+/* No comment provided by engineer. */
+"Plug-In" = "插件";
+
+/* No comment provided by engineer. */
+"Plug-in not found: %@" = "找不到插件:%@";
+
+/* No comment provided by engineer. */
+"Processing…" = "处理中…";
+
+/* No comment provided by engineer. */
+"Rename" = "备注";
+
+/* No comment provided by engineer. */
+"Replace" = "替换";
+
+/* No comment provided by engineer. */
+"Restructure" = "结构调整";
+
+/* No comment provided by engineer. */
+"Save" = "保存";
+
+/* No comment provided by engineer. */
+"The plug-in will be relocated into Frameworks/ and every load command pointing at it will be rewritten." = "插件将被移入 Frameworks/ 目录，并重写所有指向它的加载命令。";
+
+/* No comment provided by engineer. */
+"This plug-in is not a dylib." = "这个插件不是 dylib。";
+
+/* No comment provided by engineer. */
+"This plug-in is not a framework." = "这个插件不是 framework。";
+
+/* No comment provided by engineer. */
+"Unable to load the target application." = "无法加载目标应用。";
+
+/* No comment provided by engineer. */
+"Unknown" = "未知";
