@@ -6,6 +6,7 @@
 //
 
 import Combine
+import Foundation
 import SwiftUI
 
 final class EjectListModel: ObservableObject {
@@ -37,12 +38,12 @@ final class EjectListModel: ObservableObject {
     func reload() {
         var plugIns = [InjectedPlugIn]()
         plugIns += InjectorV3.main.injectedAssetURLsInBundle(app.url)
-            .map { InjectedPlugIn(url: $0, isEnabled: true) }
+            .map { InjectedPlugIn(url: $0, isEnabled: true, alias: alias(for: $0)) }
 
         let enabledNames = plugIns.map { $0.url.lastPathComponent }
         plugIns += InjectorV3.main.persistedAssetURLs(bid: app.bid)
             .filter { !enabledNames.contains($0.lastPathComponent) }
-            .map { InjectedPlugIn(url: $0, isEnabled: false) }
+            .map { InjectedPlugIn(url: $0, isEnabled: false, alias: alias(for: $0)) }
 
         injectedPlugIns = plugIns
             .sorted { $0.url.lastPathComponent.localizedStandardCompare($1.url.lastPathComponent) == .orderedAscending }
@@ -55,7 +56,7 @@ final class EjectListModel: ObservableObject {
 
         if !filter.searchKeyword.isEmpty {
             filteredPlugIns = filteredPlugIns.filter {
-                $0.url.lastPathComponent.localizedCaseInsensitiveContains(filter.searchKeyword)
+                $0.displayName.localizedCaseInsensitiveContains(filter.searchKeyword)
             }
         }
 
@@ -69,5 +70,33 @@ final class EjectListModel: ObservableObject {
             return
         }
         processingPlugIn = plugIn
+    }
+
+    // MARK: - Alias
+
+    private func aliasKey(for url: URL) -> String {
+        "PlugInAlias-\(app.bid)-\(url.lastPathComponent)"
+    }
+
+    func alias(for url: URL) -> String? {
+        guard let value = UserDefaults.standard.string(forKey: aliasKey(for: url)),
+              !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else {
+            return nil
+        }
+        return value
+    }
+
+    func setAlias(_ alias: String?, for plugIn: InjectedPlugIn) {
+        let trimmed = alias?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let key = aliasKey(for: plugIn.url)
+
+        if let trimmed, !trimmed.isEmpty {
+            UserDefaults.standard.set(trimmed, forKey: key)
+        } else {
+            UserDefaults.standard.removeObject(forKey: key)
+        }
+
+        reload()
     }
 }
