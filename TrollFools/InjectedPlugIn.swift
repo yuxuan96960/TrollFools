@@ -12,11 +12,17 @@ struct InjectedPlugIn: Equatable, Identifiable, Hashable {
     let url: URL
     let createdAt: Date
     let isEnabled: Bool
+    let alias: String?
 
-    init(url: URL, isEnabled: Bool) {
+    var displayName: String {
+        alias ?? url.lastPathComponent
+    }
+
+    init(url: URL, isEnabled: Bool, alias: String? = nil) {
         self.id = url.absoluteString
         self.url = url
         self.createdAt = (try? url.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? Date()
         self.isEnabled = isEnabled
+        self.alias = alias
     }
 }
