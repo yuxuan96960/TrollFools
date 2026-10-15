@@ -30,7 +30,7 @@ extension App {
             ),
             App(
                 bid: NSLocalizedString("Full-Fledged Automation Framework for TrollStore.", comment: ""),
-                name: NSLocalizedString("XXTouch Elite TS", comment: ""),
+                name: NSLocalizedString("XXTouch Elite TS", comment: ""),
                 type: "System",
                 teamID: "GXZ23M5TP2",
                 url: URL(string: "https://havoc.app/package/xxtouchelitets")!,
